@@ -215,16 +215,16 @@ def process_publaynet_gt():
 
 def main():
 
-    debug_mode = True
+    debug_mode = False
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
 
-    # use original publaynet test set
-    args_dataset = "publaynet"
-    dataset = get_dataset(args_dataset, 'test')
-    test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
+    # # use original publaynet test set
+    # args_dataset = "publaynet"
+    # dataset = get_dataset(args_dataset, 'test')
+    # test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
     # # use yilin selected publaynet test set
     # test_layouts = process_publaynet_gt()
@@ -254,6 +254,7 @@ def main():
         label_tensor.to(device)
 
         mask = torch.ones_like(label_tensor).bool()
+        # mask = torch.zeros_like(label_tensor).bool()
         # 16 * 4 -> 1 * 16 * 4
         bbox_tensor = bbox_tensor.unsqueeze(0)
         # 16 -> 1 * 16
@@ -267,12 +268,16 @@ def main():
 
     # max_iou = compute_maximum_iou(test_layouts, val_layouts)
 
-    max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
-    print(f"max iou {max_iou}")
-    breakpoint()
+    # max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
+    # print(f"max iou {max_iou}")
+    # breakpoint()
 
     alignment = average(alignment)
     overlap = average(overlap)
+
+    # multiply 100 to alignment and overlap
+    alignment *= 100
+    overlap *= 100
 
     print(f"alignment {alignment}")
     print(f"overlap {overlap}")
@@ -281,6 +286,80 @@ def main():
 
     breakpoint()
     print()
+
+
+
+# def main_debug():
+
+#     debug_mode = False
+
+#     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+#     dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
+
+#     # use original publaynet test set
+#     args_dataset = "publaynet"
+#     dataset = get_dataset(args_dataset, 'test')
+#     test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
+
+    
+
+#     # # use yilin selected publaynet test set
+#     # test_layouts = process_publaynet_gt()
+
+#     dolfin_layouts = []
+
+#     process_num = 1024
+#     alignment, overlap = [], []
+#     for i in tqdm(range(process_num), desc="dolfin"):
+#         file_path = os.path.join(dolfin_sample_dir, f"{i}.pt")
+
+#         # check if file exist
+#         assert os.path.exists(file_path)
+
+#         dolfin_layout = torch.load(file_path, map_location=torch.device('cpu'))
+
+#         bbox_tensor, label_tensor = process_dolfin_input(dolfin_layout)
+
+#         bbox_numpy = bbox_tensor.numpy()
+#         label_numpy = label_tensor.numpy()
+
+#         dolfin_layouts.append((
+#             bbox_numpy, label_numpy
+#         ))
+
+#         bbox_tensor.to(device)
+#         label_tensor.to(device)
+
+#         mask = torch.ones_like(label_tensor).bool()
+#         # mask = torch.zeros_like(label_tensor).bool()
+#         # 16 * 4 -> 1 * 16 * 4
+#         bbox_tensor = bbox_tensor.unsqueeze(0)
+#         # 16 -> 1 * 16
+#         mask = mask.unsqueeze(0)
+
+#         if debug_mode:
+#             continue
+
+#         alignment += compute_alignment(bbox_tensor, mask).tolist()
+#         overlap += compute_overlap(bbox_tensor, mask).tolist()
+
+#     # max_iou = compute_maximum_iou(test_layouts, val_layouts)
+
+#     # max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
+#     # print(f"max iou {max_iou}")
+#     # breakpoint()
+
+#     alignment = average(alignment)
+#     overlap = average(overlap)
+
+#     print(f"alignment {alignment}")
+#     print(f"overlap {overlap}")
+
+    
+
+#     breakpoint()
+#     print()
 
 
 # original main start
@@ -339,6 +418,13 @@ def main_backup():
             alignment += compute_alignment(bbox, mask).tolist()
             overlap += compute_overlap(bbox, mask).tolist()
 
+    alignment = average(alignment)
+    overlap = average(overlap)
+    print(f"align {alignment}")
+    print(f"overlap {overlap}")
+    breakpoint()
+    print()
+
     if args_compute_real:
         dataset = get_dataset(args_dataset, 'val')
         dataloader = DataLoader(dataset,
@@ -348,9 +434,9 @@ def main_backup():
                                 shuffle=False)
         val_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
-        print(type(val_layouts[0]))
-        print(len(val_layouts[0]))
-        breakpoint()
+        # print(type(val_layouts[0]))
+        # print(len(val_layouts[0]))
+        # breakpoint()
 
         max_iou = compute_maximum_iou(test_layouts, val_layouts)
 
