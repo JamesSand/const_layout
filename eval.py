@@ -4,6 +4,8 @@ import numpy as np
 from pathlib import Path
 from collections import defaultdict
 
+from tqdm import tqdm
+
 import torch
 from torch_geometric.data import Data, Batch, DataLoader
 from torch_geometric.utils import to_dense_batch
@@ -41,6 +43,7 @@ def main():
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    # we temporary ignore dataloader 
     dataset = get_dataset(args.dataset, 'test')
     dataloader = DataLoader(dataset,
                             batch_size=args.batch_size,
@@ -52,9 +55,13 @@ def main():
     # prepare for evaluation
     fid_test = LayoutFID(args.dataset, device)
 
+    # print("fid test init done")
+    # breakpoint()
+    # print()
+
     # real layouts
     alignment, overlap = [], []
-    for i, data in enumerate(dataloader):
+    for i, data in tqdm(enumerate(dataloader)):
         data = data.to(device)
         label, mask = to_dense_batch(data.y, data.batch)
         bbox, _ = to_dense_batch(data.x, data.batch)
@@ -67,6 +74,9 @@ def main():
             alignment += compute_alignment(bbox, mask).tolist()
             overlap += compute_overlap(bbox, mask).tolist()
 
+    # breakpoint()
+    # print()
+
     if args.compute_real:
         dataset = get_dataset(args.dataset, 'val')
         dataloader = DataLoader(dataset,
@@ -76,7 +86,7 @@ def main():
                                 shuffle=False)
         val_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
-        for i, data in enumerate(dataloader):
+        for i, data in tqdm(enumerate(dataloader)):
             data = data.to(device)
             label, mask = to_dense_batch(data.y, data.batch)
             bbox, _ = to_dense_batch(data.x, data.batch)
@@ -97,6 +107,10 @@ def main():
             'Overlap': [overlap],
         })
         print()
+
+    print("compute real done")
+    breakpoint()
+    print()
 
     # generated layouts
     scores = defaultdict(list)

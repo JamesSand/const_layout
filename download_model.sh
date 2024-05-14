@@ -8,12 +8,14 @@ function download {
     wget ${url} -O pretrained/${ckpt_name} -q || wget ${url} -O pretrained/${ckpt_name}
 }
 
-for name in rico publaynet magazine;
-do
-    # LayoutGAN++
-    download layoutganpp $name
-    # LayoutNet
-    download layoutnet $name
-done
+download layoutnet publaynet
+
+# for name in rico publaynet magazine;
+# do
+#     # LayoutGAN++
+#     download layoutganpp $name
+#     # LayoutNet
+#     download layoutnet $name
+# done
 
 echo "Successfully downloaded the pretrained models"

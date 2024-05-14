@@ -5,3 +5,5 @@ __pycache__
 data/dataset
 output
 pretrained
+
+download_data
