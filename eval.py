@@ -216,60 +216,13 @@ def process_dolfin_input(input_tensor):
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # dataset = get_dataset("publaynet", 'test')
-    # dataloader = DataLoader(dataset,
-    #                         batch_size=64,
-    #                         num_workers=4,
-    #                         pin_memory=True,
-    #                         shuffle=False)
-    # # test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
-
-    # # # prepare for evaluation
-    # # fid_test = LayoutFID("publaynet", device)
-
-    # # print("fid test init done")
-    # # breakpoint()
-    # # print()
-
-    # # real layouts
-    # # alignment, overlap = [], []
-    # for i, data in tqdm(enumerate(dataloader)):
-    #     data = data.to(device)
-
-    #     breakpoint()
-
-    #     label, mask = to_dense_batch(data.y, data.batch)
-    #     bbox, _ = to_dense_batch(data.x, data.batch)
-    #     padding_mask = ~mask
-
-    # # parting line
-
-
     dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
-    # sample_pt_list = os.listdir(dolfin_sample_dir)
-
-    # break_cnt = 100
-    break_cnt = 9999
-    cnt = 0
-
-    # stack_bs = 64
-    # # stack_cnt = 0
-
-    # bbox_stack_list = []
-    # label_stack_list = []
 
     # load evaluation layouts
     args_dataset = "publaynet"
-    args_batch_size = 64
-    # args_compute_real = True
 
     # we temporary ignore dataloader 
     dataset = get_dataset(args_dataset, 'test')
-    # dataloader = DataLoader(dataset,
-    #                         batch_size=args_batch_size,
-    #                         num_workers=4,
-    #                         pin_memory=True,
-    #                         shuffle=False)
     test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
     dolfin_layouts = []
@@ -284,19 +237,10 @@ def main():
 
         dolfin_layout = torch.load(file_path, map_location=torch.device('cpu'))
 
-        # data_list = process_dolfin_input(dolfin_layout)
-        # data = Batch.from_data_list(data_list)
-
-        # data = data.to(device)
-
         bbox_tensor, label_tensor = process_dolfin_input(dolfin_layout)
 
         bbox_numpy = bbox_tensor.numpy()
         label_numpy = label_tensor.numpy()
-        # print(bbox_numpy.shape)
-        # print(label_numpy.shape)
-        # breakpoint()
-        # print()
 
         dolfin_layouts.append((
             bbox_numpy, label_numpy
@@ -314,28 +258,6 @@ def main():
         alignment += compute_alignment(bbox_tensor, mask).tolist()
         overlap += compute_overlap(bbox_tensor, mask).tolist()
 
-        # print(data.y.shape)
-        # print(data.batch.shape)
-        # breakpoint()
-
-        # valid for True, invalide for False
-
-
-        # label, mask = to_dense_batch(data.y, data.batch)
-        # bbox, _ = to_dense_batch(data.x, data.batch)
-        # padding_mask = ~mask
-
-        # print(bbox.shape)
-        # breakpoint()
-
-        # # compute metric start
-        # alignment += compute_alignment(bbox, mask).tolist()
-        # overlap += compute_overlap(bbox, mask).tolist()
-
-        cnt += 1
-        if cnt == break_cnt:
-            break
-
     # max_iou = compute_maximum_iou(test_layouts, val_layouts)
     alignment = average(alignment)
     overlap = average(overlap)
@@ -347,33 +269,8 @@ def main():
 
     print(f"max iou {max_iou}")
 
-    print("every done")
     breakpoint()
     print()
-
-    # print(f'Results with {break_cnt} data')
-    # print_scores({
-    #     # 'FID': [fid_score],
-    #     # 'Max. IoU': [max_iou],
-    #     'Alignment': [alignment],
-    #     'Overlap': [overlap],
-    # })
-    # print()
-
-
-
-    # print("batched success")
-    # breakpoint()
-    # print()
-
-            # with open(file_path, "rb") as fb:
-            #     generated_layouts = pickle.load(fb)
-    #     else:
-    #         print(file_path, "not exist")
-
-    # print("sanity check done")
-    # breakpoint()
-    # print()
 
 
 # original main start
