@@ -132,6 +132,9 @@ def compute_maximum_iou(layouts_1, layouts_2, n_jobs=None):
     with mp.Pool(n_jobs) as p:
         scores = p.map(__compute_maximum_iou, args)
     scores = np.asarray(list(chain.from_iterable(scores)))
+
+    # breakpoint()
+
     return scores.mean().item()
 
 

@@ -115,8 +115,6 @@ def process_dolfin_input(input_tensor):
     w = 400
     x = input_tensor
 
-    data_list = []
-
     bbox_list = []
     label_list = []
 
@@ -182,54 +180,60 @@ def process_dolfin_input(input_tensor):
         bbox_list.append(bbox)
         label_list.append(label)
 
-        
-
-        # data = Data(x=bbox, y=label)
-        # data_list.append(data)
-
-    # return data_list
-
     bbox_tensor = torch.cat(bbox_list, dim=0)
     label_tensor = torch.cat(label_list, dim=0)
-    # print(bbox_tensor.shape)
-    # print(label_tensor.shape)
-    # breakpoint()
-
-    # try:
-    #     bbox_tensor = torch.cat(bbox_list, dim=0)
-    #     label_tensor = torch.cat(label_list, dim=0)
-    # except Exception as e:
-    #     print(e)
-    #     breakpoint()
-    #     print()
 
     # return shape: 16 * 4 for bbox, 16 for label
     return bbox_tensor, label_tensor
 
-    #     ret_list.append({
-    #         "type": tt,
-    #         "xywh" : [center_x, center_y, bbox_width, bbox_height]
-    #     })
 
-    # return ret_list
+def process_publaynet_gt():
+    process_num = 1024
+    publaynet_gt_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/testset/tensor_test"
+
+    test_layouts = []
+    for i in tqdm(range(process_num), desc="load publaynet gt"):
+        file_path = os.path.join(publaynet_gt_dir, f"test_{i}.pt")
+        layout_tensor = torch.load(file_path)
+        bbox_tensor = layout_tensor[:, :4]
+        label_tensor = layout_tensor[:, 4]
+
+        # print(bbox_tensor.shape)
+        # print(label_tensor.shape)
+        # breakpoint()
+
+        bbox_numpy = bbox_tensor.numpy()
+        label_numpy = label_tensor.numpy()
+
+        test_layouts.append((
+            bbox_numpy, label_numpy
+        ))
+
+    return test_layouts
+
+
 
 def main():
+
+    debug_mode = True
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
 
-    # load evaluation layouts
+    # use original publaynet test set
     args_dataset = "publaynet"
-
-    # we temporary ignore dataloader 
     dataset = get_dataset(args_dataset, 'test')
     test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
+
+    # # use yilin selected publaynet test set
+    # test_layouts = process_publaynet_gt()
 
     dolfin_layouts = []
 
     process_num = 1024
     alignment, overlap = [], []
-    for i in tqdm(range(process_num)):
+    for i in tqdm(range(process_num), desc="dolfin"):
         file_path = os.path.join(dolfin_sample_dir, f"{i}.pt")
 
         # check if file exist
@@ -255,19 +259,25 @@ def main():
         # 16 -> 1 * 16
         mask = mask.unsqueeze(0)
 
+        if debug_mode:
+            continue
+
         alignment += compute_alignment(bbox_tensor, mask).tolist()
         overlap += compute_overlap(bbox_tensor, mask).tolist()
 
     # max_iou = compute_maximum_iou(test_layouts, val_layouts)
+
+    max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
+    print(f"max iou {max_iou}")
+    breakpoint()
+
     alignment = average(alignment)
     overlap = average(overlap)
 
     print(f"alignment {alignment}")
     print(f"overlap {overlap}")
 
-    max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
-
-    print(f"max iou {max_iou}")
+    
 
     breakpoint()
     print()
