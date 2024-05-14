@@ -6,6 +6,9 @@ from collections import defaultdict
 import os
 from tqdm import tqdm
 
+# import numpy as np
+from scipy.optimize import linear_sum_assignment
+
 import torch
 from torch_geometric.data import Data, Batch, DataLoader
 from torch_geometric.utils import to_dense_batch
@@ -28,85 +31,6 @@ def print_scores(score_dict):
             print(f'\t{k}: {mean:.2f} ({std:.2f})')
         else:
             print(f'\t{k}: {v[0]:.2f}')
-
-
-def process_dolfin_input_backup(input_tensor):
-    h = 600
-    w = 400
-    x = input_tensor
-
-    data_list = []
-
-    for i in range(16):
-        tmpt = torch.zeros(1, h, w)
-        tmp = x[0][:, 4*i:4*i+4]
-
-
-        ############# start here ##############
-        b0 = round((tmp[0][0].item() + 1) * (w/2.0))
-        b0 = max(0, min(w, b0))
-        b1 = round((tmp[0][1].item() + 1) * (h/2.0))
-        b1 = max(0, min(h, b1))
-        b2 = round((2.0*tmp[0][2].item() + tmp[0][0].item() + 1) * (w/2.0))
-        b2 = max(0, min(w, b2))
-        b3 = round((2.0*tmp[0][3].item() + tmp[0][1].item() + 1) * (h/2.0))
-        b3 = max(0, min(h, b3))
-        # print(b0, b1, b2, b3, w, h)
-        if (b0+b1+b2+b3>5):
-            tmpt[:, b1:b3+1, b0:b2+1] = 1
-        else:
-            break
-
-        typt = tmp[2:4, :]
-        tt = -1
-        for t in range(4):
-            if (typt[0][t] > 0):
-                tt = t
-                break
-        if (tt == -1) and (typt[1][0] > 0):
-            tt = 4
-        ############## end here ##################
-
-        # # we have correct b0, b1, b2, b3 and type tt here
-        # print(f"b0, b1 ({b0}, {b1})")
-        # print(f"b2, b3 ({b2}, {b3})")
-        # print(f"tt ({tt})")
-        # breakpoint()
-        # print()
-
-        # compute center
-        center_x = (b0 + b2) / 2
-        center_y = (b1 + b3) / 2
-        bbox_width = (b2 - b0)
-        bbox_height = (b3 - b1)
-
-        # normalize
-        center_x = center_x / w
-        center_y = center_y / h
-        bbox_width = bbox_width / w
-        bbox_height = bbox_height / h
-
-        if bbox_width < 0 or bbox_height < 0:
-            print(f"error width {bbox_width} bbox {bbox_height}")
-            continue
-
-        bbox = torch.tensor([center_x, center_y, bbox_width, bbox_height], dtype=torch.float)
-        label = torch.tensor(tt, dtype=torch.long)
-
-        bbox = bbox.unsqueeze(0)
-        label = label.unsqueeze(0)
-
-        data = Data(x=bbox, y=label)
-        data_list.append(data)
-
-    return data_list
-
-    #     ret_list.append({
-    #         "type": tt,
-    #         "xywh" : [center_x, center_y, bbox_width, bbox_height]
-    #     })
-
-    # return ret_list
 
 
 
@@ -212,6 +136,88 @@ def process_publaynet_gt():
     return test_layouts
 
 
+def docsim_bbox_weight(bbox1, bbox2):
+    # and suppose they have same type(label)
+    # suppose input format is (center_x, center_y, width, height)
+    cx1, cy1, w1, h1 = bbox1
+    cx2, cy2, w2, h2 = bbox2
+
+    alpha = min(w1 * h1, w2 * h2) ** 0.5
+
+    exponent = - ((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2) ** 0.5 - 2 * (abs(w1 - w2) + abs(h1 - h2))
+    exp = 2 ** exponent
+
+    return alpha * exp
+
+def docsim_layout_weight(layout1, layout2):
+
+    bboxes1, labels1 = layout1
+    bboxes2, labels2 = layout2
+
+    bbox_num1 = bboxes1.shape[0]
+    bbox_num2 = bboxes2.shape[0]
+    
+    bbox_weight_matrix = np.full((bbox_num1, bbox_num2), 0.0)
+
+    for i in range(bbox_num1):
+        for j in range(bbox_num2):
+            if labels1[i] != labels2[j]:
+                continue
+            bbox_weight_matrix[i][j] = docsim_bbox_weight(bboxes1[i], bboxes2[j])
+
+    set1 = set(labels1)
+    set2 = set(labels2)
+
+    inter = set1.intersection(set2)
+
+    if bbox_weight_matrix.max() == 0.0:
+        if inter:
+            print(labels1)
+            print(labels2)
+            print("sanity check err")
+            exit(0)
+            # breakpoint()
+            # print()
+        else:
+            # weight matrix all zero, and intersection is None.
+            # correct to return 0
+            return 0
+
+    # use hungarian matching to get the final score
+    row_ind, col_ind = linear_sum_assignment(- bbox_weight_matrix) 
+
+    total = 0.0
+    for i, j in zip(row_ind, col_ind):
+        total += bbox_weight_matrix[i][j]
+
+    return total / len(row_ind)
+
+
+
+def calculate_docsim(layouts1, layouts2):
+
+    # print(layouts1[0])
+    # print(layouts2[0])
+    # breakpoint()
+
+    layout_weight_matrix = np.full((len(layouts1), len(layouts2)), -np.inf)
+
+    with tqdm(total=len(layouts1) * len(layouts2)) as pbar:
+
+        for i in range(len(layouts1)):
+            for j in range(len(layouts2)):
+                layout_weight_matrix[i][j] = docsim_layout_weight(layouts1[i], layouts2[j])
+                pbar.update(1)
+
+    # use hungarian matching to get the final score
+    row_ind, col_ind = linear_sum_assignment(- layout_weight_matrix) 
+
+    total = 0.0
+    for i, j in zip(row_ind, col_ind):
+        total += layout_weight_matrix[i][j]
+
+    return total / len(row_ind)
+
 
 def main():
 
@@ -226,8 +232,31 @@ def main():
     # dataset = get_dataset(args_dataset, 'test')
     # test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
-    # # use yilin selected publaynet test set
-    # test_layouts = process_publaynet_gt()
+    # use yilin selected publaynet test set
+    test_layouts = process_publaynet_gt()
+
+    dolfin_layouts = []
+
+    process_num = 1024
+    alignment, overlap = [], []
+    for i in tqdm(range(process_num), desc="dolfin"):
+        file_path = os.path.join(dolfin_sample_dir, f"{i}.pt")
+
+        # check if file exist
+        assert os.path.exists(file_path)
+
+        dolfin_layout = torch.load(file_path, map_location=torch.device('cpu'))
+
+        bbox_tensor, label_tensor = process_dolfin_input(dolfin_layout)
+
+        bbox_numpy = bbox_tensor.numpy()
+        label_numpy = label_tensor.numpy()
+
+        dolfin_layouts.append((
+            bbox_numpy, label_numpy
+        ))
+
+    calculate_docsim(dolfin_layouts, test_layouts)
 
     dolfin_layouts = []
 
@@ -286,80 +315,6 @@ def main():
 
     breakpoint()
     print()
-
-
-
-# def main_debug():
-
-#     debug_mode = False
-
-#     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-#     dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
-
-#     # use original publaynet test set
-#     args_dataset = "publaynet"
-#     dataset = get_dataset(args_dataset, 'test')
-#     test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
-
-    
-
-#     # # use yilin selected publaynet test set
-#     # test_layouts = process_publaynet_gt()
-
-#     dolfin_layouts = []
-
-#     process_num = 1024
-#     alignment, overlap = [], []
-#     for i in tqdm(range(process_num), desc="dolfin"):
-#         file_path = os.path.join(dolfin_sample_dir, f"{i}.pt")
-
-#         # check if file exist
-#         assert os.path.exists(file_path)
-
-#         dolfin_layout = torch.load(file_path, map_location=torch.device('cpu'))
-
-#         bbox_tensor, label_tensor = process_dolfin_input(dolfin_layout)
-
-#         bbox_numpy = bbox_tensor.numpy()
-#         label_numpy = label_tensor.numpy()
-
-#         dolfin_layouts.append((
-#             bbox_numpy, label_numpy
-#         ))
-
-#         bbox_tensor.to(device)
-#         label_tensor.to(device)
-
-#         mask = torch.ones_like(label_tensor).bool()
-#         # mask = torch.zeros_like(label_tensor).bool()
-#         # 16 * 4 -> 1 * 16 * 4
-#         bbox_tensor = bbox_tensor.unsqueeze(0)
-#         # 16 -> 1 * 16
-#         mask = mask.unsqueeze(0)
-
-#         if debug_mode:
-#             continue
-
-#         alignment += compute_alignment(bbox_tensor, mask).tolist()
-#         overlap += compute_overlap(bbox_tensor, mask).tolist()
-
-#     # max_iou = compute_maximum_iou(test_layouts, val_layouts)
-
-#     # max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
-#     # print(f"max iou {max_iou}")
-#     # breakpoint()
-
-#     alignment = average(alignment)
-#     overlap = average(overlap)
-
-#     print(f"alignment {alignment}")
-#     print(f"overlap {overlap}")
-
-    
-
-#     breakpoint()
-#     print()
 
 
 # original main start
