@@ -6,6 +6,9 @@ from collections import defaultdict
 import os
 from tqdm import tqdm
 
+from multiprocessing import Pool, cpu_count
+
+
 # import numpy as np
 from scipy.optimize import linear_sum_assignment
 
@@ -190,7 +193,8 @@ def docsim_layout_weight(layout1, layout2):
     for i, j in zip(row_ind, col_ind):
         total += bbox_weight_matrix[i][j]
 
-    return total / len(row_ind)
+    # return total / len(row_ind)
+    return total
 
 
 
@@ -200,14 +204,26 @@ def calculate_docsim(layouts1, layouts2):
     # print(layouts2[0])
     # breakpoint()
 
-    layout_weight_matrix = np.full((len(layouts1), len(layouts2)), -np.inf)
+    # layout_weight_matrix = np.full((len(layouts1), len(layouts2)), -np.inf)
 
-    with tqdm(total=len(layouts1) * len(layouts2)) as pbar:
+    # with tqdm(total=len(layouts1) * len(layouts2)) as pbar:
+    #     for i in range(len(layouts1)):
+    #         for j in range(len(layouts2)):
+    #             layout_weight_matrix[i][j] = docsim_layout_weight(layouts1[i], layouts2[j])
+    #             pbar.update(1)
 
-        for i in range(len(layouts1)):
-            for j in range(len(layouts2)):
-                layout_weight_matrix[i][j] = docsim_layout_weight(layouts1[i], layouts2[j])
-                pbar.update(1)
+    num_processes = cpu_count()  # 获取CPU核心数
+    pool = Pool(processes=num_processes)
+    row_result_list = []
+    for i in tqdm(range(len(layouts1))):
+        # 分配任务
+        row_result = [pool.apply_async(docsim_layout_weight, args=(layouts1[i], layouts2[j])) for j in range(len(layouts2))]
+
+        # 收集结果
+        row_result = [p.get() for p in row_result]
+        row_result_list.append(row_result)
+
+    layout_weight_matrix = np.stack(row_result_list, axis=0)
 
     # use hungarian matching to get the final score
     row_ind, col_ind = linear_sum_assignment(- layout_weight_matrix) 
@@ -256,7 +272,11 @@ def main():
             bbox_numpy, label_numpy
         ))
 
-    calculate_docsim(dolfin_layouts, test_layouts)
+    docsim_value = calculate_docsim(dolfin_layouts, test_layouts)
+
+    print(docsim_value)
+    breakpoint()
+    print()
 
     dolfin_layouts = []
 

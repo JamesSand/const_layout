@@ -23,6 +23,8 @@ def parallel_matrix_add(a, b):
     # 收集结果
     results = [p.get() for p in results]
 
+    breakpoint()
+
     # 合并结果
     result_matrix = np.concatenate(results, axis=0)
 
