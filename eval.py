@@ -114,8 +114,8 @@ def process_dolfin_input(input_tensor):
     return bbox_tensor, label_tensor
 
 
-def process_publaynet_gt():
-    process_num = 1024
+def process_publaynet_gt(process_num):
+    # process_num = 1024
     publaynet_gt_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/testset/tensor_test"
 
     test_layouts = []
@@ -168,23 +168,8 @@ def docsim_layout_weight(layout1, layout2):
                 continue
             bbox_weight_matrix[i][j] = docsim_bbox_weight(bboxes1[i], bboxes2[j])
 
-    set1 = set(labels1)
-    set2 = set(labels2)
-
-    inter = set1.intersection(set2)
-
     if bbox_weight_matrix.max() == 0.0:
-        if inter:
-            print(labels1)
-            print(labels2)
-            print("sanity check err")
-            exit(0)
-            # breakpoint()
-            # print()
-        else:
-            # weight matrix all zero, and intersection is None.
-            # correct to return 0
-            return 0
+        return 0.0
 
     # use hungarian matching to get the final score
     row_ind, col_ind = linear_sum_assignment(- bbox_weight_matrix) 
@@ -193,24 +178,21 @@ def docsim_layout_weight(layout1, layout2):
     for i, j in zip(row_ind, col_ind):
         total += bbox_weight_matrix[i][j]
 
-    # return total / len(row_ind)
+    # we use no average here
     return total
 
+# calculate uni match count
+def unique_match(selected_metric, threshold):
+    unique_match_cnt = 0
+
+    for select_item in selected_metric:
+        if select_item >= threshold:
+            unique_match_cnt += 1
+
+    return unique_match_cnt
 
 
-def calculate_docsim(layouts1, layouts2):
-
-    # print(layouts1[0])
-    # print(layouts2[0])
-    # breakpoint()
-
-    # layout_weight_matrix = np.full((len(layouts1), len(layouts2)), -np.inf)
-
-    # with tqdm(total=len(layouts1) * len(layouts2)) as pbar:
-    #     for i in range(len(layouts1)):
-    #         for j in range(len(layouts2)):
-    #             layout_weight_matrix[i][j] = docsim_layout_weight(layouts1[i], layouts2[j])
-    #             pbar.update(1)
+def calculate_uni_match_docsim(layouts1, layouts2):
 
     num_processes = cpu_count()  # 获取CPU核心数
     pool = Pool(processes=num_processes)
@@ -228,11 +210,13 @@ def calculate_docsim(layouts1, layouts2):
     # use hungarian matching to get the final score
     row_ind, col_ind = linear_sum_assignment(- layout_weight_matrix) 
 
-    total = 0.0
-    for i, j in zip(row_ind, col_ind):
-        total += layout_weight_matrix[i][j]
 
-    return total / len(row_ind)
+    selected_weight = []
+    for i, j in zip(row_ind, col_ind):
+        selected_weight.append(layout_weight_matrix[i][j])
+
+    # we set threshold to 0.5
+    return unique_match(selected_weight, 0.5)
 
 
 def main():
@@ -241,7 +225,16 @@ def main():
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
+    # # final result data
+    # dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_sep/DiT-S-4-0132000-size-256-vae-ema-cfg-1.5-seed-0"
+
+    # ablation data
+    dolfin_sample_dir = "/mnt/pentagon/yiw182/DiTC_pbnbb_std/4226sample_org/DiT-S-4-0276000-size-256-vae-ema-cfg-1.5-seed-0"
+
+    print("-" * 50)
+    print(dolfin_sample_dir)
+    print("-" * 50)
+
 
     # # use original publaynet test set
     # args_dataset = "publaynet"
@@ -249,11 +242,14 @@ def main():
     # test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
 
     # use yilin selected publaynet test set
-    test_layouts = process_publaynet_gt()
+
+    # process_num = 4226
+    process_num = 1024
+
+    test_layouts = process_publaynet_gt(process_num=process_num)
 
     dolfin_layouts = []
 
-    process_num = 1024
     alignment, overlap = [], []
     for i in tqdm(range(process_num), desc="dolfin"):
         file_path = os.path.join(dolfin_sample_dir, f"{i}.pt")
@@ -272,11 +268,21 @@ def main():
             bbox_numpy, label_numpy
         ))
 
-    docsim_value = calculate_docsim(dolfin_layouts, test_layouts)
+    # print("dolfin data load success")
+    # breakpoint()
+    # print()
 
-    print(docsim_value)
+    uni_match_docsim = calculate_uni_match_docsim(dolfin_layouts, test_layouts)
+
+    print(uni_match_docsim)
     breakpoint()
     print()
+
+    # if you only need unique match of docsim, you should stop here
+
+    # print(docsim_value)
+    # breakpoint()
+    # print()
 
     dolfin_layouts = []
 
@@ -488,22 +494,36 @@ def main_backup():
 
 # original main end
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    # parser.add_argument('dataset', type=str, help='dataset name',
-    #                     choices=['rico', 'publaynet', 'magazine'])
-    # parser.add_argument('pkl_paths', type=str, nargs='+',
-    #                     help='generated pickle path')
-    # parser.add_argument('--batch_size', type=int,
-    #                     default=64, help='input batch size')
-    parser.add_argument('--origin', action='store_true')
+parser = argparse.ArgumentParser()
+# parser.add_argument('dataset', type=str, help='dataset name',
+#                     choices=['rico', 'publaynet', 'magazine'])
+# parser.add_argument('pkl_paths', type=str, nargs='+',
+#                     help='generated pickle path')
+# parser.add_argument('--batch_size', type=int,
+#                     default=64, help='input batch size')
+parser.add_argument('--origin', action='store_true')
+parser.add_argument("--use_average", action='store_true')
 
-    args = parser.parse_args()
+args = parser.parse_args()
 
-    if args.origin:
-        main_backup()
-    else:
-        main()
+# global use_average
+if args.use_average:
+    print("*" * 50)
+    print("average version")
+    print("*" * 50)
+    use_average = True
+else:
+    print("*" * 50)
+    print("no average version")
+    print("*" * 50)
+    use_average = False
+
+
+if args.origin:
+    main_backup()
+else:
+    main()
 
     # main()
