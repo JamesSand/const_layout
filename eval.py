@@ -203,6 +203,7 @@ def process_dolfin_input(input_tensor):
     #     breakpoint()
     #     print()
 
+    # return shape: 16 * 4 for bbox, 16 for label
     return bbox_tensor, label_tensor
 
     #     ret_list.append({
@@ -257,6 +258,22 @@ def main():
     # bbox_stack_list = []
     # label_stack_list = []
 
+    # load evaluation layouts
+    args_dataset = "publaynet"
+    args_batch_size = 64
+    # args_compute_real = True
+
+    # we temporary ignore dataloader 
+    dataset = get_dataset(args_dataset, 'test')
+    # dataloader = DataLoader(dataset,
+    #                         batch_size=args_batch_size,
+    #                         num_workers=4,
+    #                         pin_memory=True,
+    #                         shuffle=False)
+    test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
+
+    dolfin_layouts = []
+
     process_num = 1024
     alignment, overlap = [], []
     for i in tqdm(range(process_num)):
@@ -273,6 +290,18 @@ def main():
         # data = data.to(device)
 
         bbox_tensor, label_tensor = process_dolfin_input(dolfin_layout)
+
+        bbox_numpy = bbox_tensor.numpy()
+        label_numpy = label_tensor.numpy()
+        # print(bbox_numpy.shape)
+        # print(label_numpy.shape)
+        # breakpoint()
+        # print()
+
+        dolfin_layouts.append((
+            bbox_numpy, label_numpy
+        ))
+
         bbox_tensor.to(device)
         label_tensor.to(device)
 
@@ -313,6 +342,14 @@ def main():
 
     print(f"alignment {alignment}")
     print(f"overlap {overlap}")
+
+    max_iou = compute_maximum_iou(test_layouts, dolfin_layouts)
+
+    print(f"max iou {max_iou}")
+
+    print("every done")
+    breakpoint()
+    print()
 
     # print(f'Results with {break_cnt} data')
     # print_scores({
