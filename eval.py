@@ -264,6 +264,11 @@ def main():
         bbox_numpy = bbox_tensor.numpy()
         label_numpy = label_tensor.numpy()
 
+        # print(bbox_numpy.shape)
+        # print(label_numpy.shape)
+
+        # breakpoint()
+
         dolfin_layouts.append((
             bbox_numpy, label_numpy
         ))
