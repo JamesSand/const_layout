@@ -221,8 +221,6 @@ def calculate_uni_match_docsim(layouts1, layouts2):
 
 def main():
 
-    debug_mode = False
-
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # # final result data
@@ -235,15 +233,6 @@ def main():
     print(dolfin_sample_dir)
     print("-" * 50)
 
-
-    # # use original publaynet test set
-    # args_dataset = "publaynet"
-    # dataset = get_dataset(args_dataset, 'test')
-    # test_layouts = [(data.x.numpy(), data.y.numpy()) for data in dataset]
-
-    # use yilin selected publaynet test set
-
-    # process_num = 4226
     process_num = 1024
 
     test_layouts = process_publaynet_gt(process_num=process_num)
@@ -285,9 +274,8 @@ def main():
 
     # if you only need unique match of docsim, you should stop here
 
-    # print(docsim_value)
-    # breakpoint()
-    # print()
+    # the following code is used to compute alignment and overlap
+    # notice that both these two scores need to multiple 100 before print
 
     dolfin_layouts = []
 
@@ -320,8 +308,8 @@ def main():
         # 16 -> 1 * 16
         mask = mask.unsqueeze(0)
 
-        if debug_mode:
-            continue
+        # if debug_mode:
+        #     continue
 
         alignment += compute_alignment(bbox_tensor, mask).tolist()
         overlap += compute_overlap(bbox_tensor, mask).tolist()
@@ -341,8 +329,6 @@ def main():
 
     print(f"alignment {alignment}")
     print(f"overlap {overlap}")
-
-    
 
     breakpoint()
     print()
