@@ -121,13 +121,9 @@ def process_publaynet_gt(process_num):
     test_layouts = []
     for i in tqdm(range(process_num), desc="load publaynet gt"):
         file_path = os.path.join(publaynet_gt_dir, f"test_{i}.pt")
-        layout_tensor = torch.load(file_path)
+        layout_tensor = torch.load(file_path, map_location=torch.device('cpu'))
         bbox_tensor = layout_tensor[:, :4]
         label_tensor = layout_tensor[:, 4]
-
-        # print(bbox_tensor.shape)
-        # print(label_tensor.shape)
-        # breakpoint()
 
         bbox_numpy = bbox_tensor.numpy()
         label_numpy = label_tensor.numpy()
@@ -180,8 +176,14 @@ def docsim_layout_weight(layout1, layout2):
                 breakpoint()
                 print()
 
-    if bbox_weight_matrix.max() == 0.0:
-        return 0.0
+    try:
+        if bbox_weight_matrix.max() == 0.0:
+            return 0.0
+    except Exception as e:
+        print(e)
+        print(bbox_weight_matrix)
+        breakpoint()
+        print()
 
     # # use hungarian matching to get the final score
     # row_ind, col_ind = linear_sum_assignment(- bbox_weight_matrix) 
@@ -289,7 +291,6 @@ def get_layoutvae_input():
     return layoutvae_layouts
 ########### layout vae end ############
 
-
 ########## lgdata start ############
 def process_lgdata_input(layout_numpy):
     # input shape should be (9, 5)
@@ -319,6 +320,7 @@ def get_lgdata_input():
     return lgdata_layouts
 ######### lgdata end ###########
 
+############ pbn start #########
 def process_pbn_input(bbox, label):
     # process label first
     label = label - 1
@@ -342,7 +344,6 @@ def process_pbn_input(bbox, label):
         bbox[i][1] = centery
 
     return bbox, label
-
 
 def get_pbn_input():
     bbox_path = "/mnt/pentagon/yiw182/const_layout/pbn_b1000.npy"
@@ -372,31 +373,213 @@ def get_pbn_input():
     # print(label_np.shape)
     # breakpoint()
     # print()
+############ pbn end #########
+
+
+def process_rico_gt(process_num):
+    # process num should be 1024
+    # and we take last 1024 sample
+    rico_gt_path = "/mnt/pentagon/yiw182/szz/yilin_data/test_ts"
+    test_layouts = []
+
+    # empty_cnt = 0
+
+    # total_num = 4225
+
+    cur_ind = 4225
+
+    # for i in tqdm(range(process_num), desc="loading rico gt"):
+
+    with tqdm(total=process_num, desc="loading rico gt") as pbar:
+            
+        while True:
+            # cur_ind = total_num - i
+            file_path = os.path.join(rico_gt_path, f"test_{cur_ind}.pt")
+
+            cur_ind -= 1
+
+            layout_tensor = torch.load(file_path, map_location=torch.device("cpu"))
+
+            bbox_tensor = layout_tensor[:, :4]
+            label_tensor = layout_tensor[:, 4]
+
+            # avoid negative value
+            bbox_tensor[bbox_tensor < 0] = 0.0
+
+            bbox_np = bbox_tensor.numpy()
+            label_np = label_tensor.numpy()
+
+            # print(bbox_np.shape)
+            # print(label_np.shape)
+            # breakpoint()
+
+            if bbox_np.shape[0] == 0:
+                continue
+                # print(file_path)
+                # print(bbox_np)
+                # print(label_np)
+                # # breakpoint()
+                # # print()
+
+                # empty_cnt += 1
+
+            pbar.update(1)
+
+            test_layouts.append((
+                bbox_np, label_np
+            ))
+
+            if len(test_layouts) == process_num:
+                break
+
+    # print(empty_cnt)
+    # breakpoint()
+    # print()
+    
+    return test_layouts
+
+def get_sample_sep_ts_input():
+    file_dir = "/mnt/pentagon/yiw182/szz/yilin_data/sample_sep_ts"
+
+    print("*" * 50)
+    print(file_dir)
+    print("*" * 50)
+
+    sample_sep_ts_layouts = []
+    total_num = 1024
+
+    # empty_cnt = 0
+
+    for i in tqdm(range(total_num), desc="load sample sep ts"):
+        file_path = os.path.join(file_dir, f"test_{i}.pt")
+        layout_tensor = torch.load(file_path, map_location=torch.device("cpu"))
+
+        bbox_tensor = layout_tensor[:, :4]
+        label_tensor = layout_tensor[:, 4]
+
+        # avoid negative value
+        bbox_tensor[bbox_tensor < 0] = 0.0
+
+        bbox_np = bbox_tensor.numpy()
+        label_np = label_tensor.numpy()
+
+        if bbox_np.shape[0] == 0:
+            continue
+            # print(file_path)
+            # print(bbox_np)
+            # print(label_np)
+            # empty_cnt += 1
+            # breakpoint()
+            # print()
+
+        sample_sep_ts_layouts.append((
+            bbox_np, label_np
+        ))
+
+    # print(empty_cnt)
+    # breakpoint()
+    # print()
+
+    return sample_sep_ts_layouts
+
+
+
+def get_ts5_input():
+    origin_file_path = "/scratch/yiw182/rico_sample/sample_std/ts5"
+    file_dir = "/mnt/pentagon/yiw182/szz/yilin_data/ts5"
+
+    print("*" * 50)
+    print("origin file path")
+    print(origin_file_path)
+    print("cur file path")
+    print(file_dir)
+    print("*" * 50)
+
+    sample_sep_ts_layouts = []
+    total_num = 1024
+
+    for i in tqdm(range(total_num), desc="load ts5"):
+        file_path = os.path.join(file_dir, f"test_{i}.pt")
+        layout_tensor = torch.load(file_path, map_location=torch.device("cpu"))
+
+        bbox_tensor = layout_tensor[:, :4]
+        label_tensor = layout_tensor[:, 4]
+
+        # avoid negative value
+        bbox_tensor[bbox_tensor < 0] = 0.0
+
+        bbox_np = bbox_tensor.numpy()
+        label_np = label_tensor.numpy()
+
+        if bbox_np.shape[0] == 0:
+            continue
+
+        sample_sep_ts_layouts.append((
+            bbox_np, label_np
+        ))
+
+    return sample_sep_ts_layouts
+
+
 
 
 def main():
 
+    ############# getpublaynet test data start ###########
     # processed_layouts = get_layoutvae_input()
     
     # processed_layouts = get_lgdata_input()
 
-    processed_layouts = get_pbn_input()
+    # processed_layouts = get_pbn_input()
+    ############ get publaynet test data end ############
 
+    ############ get rico test data start ############
+
+    # processed_layouts = get_sample_sep_ts_input()
+    processed_layouts = get_ts5_input()
+
+    ############ get rico test data end ############
+
+
+    ############ get gt data start ###########
     process_num = 1024
 
-    test_layouts = process_publaynet_gt(process_num=process_num)
+    # test_layouts = process_publaynet_gt(process_num=process_num)
+
+    test_layouts = process_rico_gt(process_num=process_num)
+
+    # print("rico gt load success")
+    # breakpoint()
+    # print()
+
+    ########### get gt data end ##############
 
     uni_match_docsim = calculate_uni_match_docsim(processed_layouts, test_layouts)
 
     print("uni match docsim", uni_match_docsim)
-    breakpoint()
-    print()
+    # breakpoint()
+    # print()
 
     # if you only need unique match of docsim, you should stop here
 
-    # print(docsim_value)
-    # breakpoint()
-    # print()
+    # the following is calculate alignment score for processed layouts
+    alignment = []
+    for bbox_np, label_np in processed_layouts:
+        bbox_tensor = torch.from_numpy(bbox_np)
+        label_tensor = torch.from_numpy(label_np)
+
+        mask = torch.ones_like(label_tensor).bool()
+        bbox_tensor = bbox_tensor.unsqueeze(0)
+        mask = mask.unsqueeze(0)
+
+        alignment += compute_alignment(bbox_tensor, mask).tolist()
+
+    alignment = average(alignment)
+    alignment *= 100
+
+    print(f"alignment {alignment}")
+    breakpoint()
+    print()
 
     dolfin_layouts = []
 
